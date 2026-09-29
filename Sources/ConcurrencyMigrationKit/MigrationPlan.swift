@@ -4,6 +4,15 @@ public struct PlannedModule: Sendable, Hashable {
     public let openDiagnostics: Int
     public let blastRadius: Int
     public let owningTeam: String
+
+    // Explicitly public: the compiler's memberwise initialiser is internal, which would
+    // make the public `MigrationPlan.init` below unusable from outside the module.
+    public init(id: ModuleID, openDiagnostics: Int, blastRadius: Int, owningTeam: String) {
+        self.id = id
+        self.openDiagnostics = openDiagnostics
+        self.blastRadius = blastRadius
+        self.owningTeam = owningTeam
+    }
 }
 
 /// A set of modules that can be migrated in parallel.
@@ -14,6 +23,11 @@ public struct MigrationWave: Sendable, Hashable {
     public let index: Int
     /// Ordered by the planner's rank, best-first.
     public let modules: [PlannedModule]
+
+    public init(index: Int, modules: [PlannedModule]) {
+        self.index = index
+        self.modules = modules
+    }
 
     /// Total outstanding diagnostics in this wave — what the effort budget is spent on.
     public var totalDiagnostics: Int {
