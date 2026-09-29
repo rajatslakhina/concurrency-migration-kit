@@ -84,7 +84,13 @@ public struct MigrationDashboardView: View {
                 }
             }
             .navigationTitle("Swift 6 Migration")
+            // `navigationBarTitleDisplayMode` and `.insetGrouped` below are
+            // `@available(macOS, unavailable)`. Package.swift declares macOS, and the
+            // `apple` CI job builds for it, so an unguarded use here would break
+            // `swift build` on any Mac — which is the likeliest place a reader runs it.
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
         }
     }
 
@@ -104,7 +110,11 @@ public struct MigrationDashboardView: View {
             case .debt: debtSections
             }
         }
+        #if os(iOS)
         .listStyle(.insetGrouped)
+        #else
+        .listStyle(.inset)
+        #endif
     }
 
     // MARK: - Summary
