@@ -70,6 +70,16 @@ public struct MigrationPlanner: WavePlanning {
         var unreachable: [ModuleID] = []
 
         while !remaining.isEmpty {
+            // A correct plan needs at most one wave per module. Exceeding that means the
+            // loop stopped making progress — which the starvation guard below is supposed
+            // to make impossible. Recording it as `unreachable` turns a regression into a
+            // named test failure (`MigrationPlannerTests` asserts `unreachable` stays
+            // empty) instead of an unbounded loop that CI can only report as a timeout.
+            guard waves.count < graph.count else {
+                unreachable = remaining.sorted()
+                break
+            }
+
             let ready = remaining
                 .filter { id in
                     guard let node = graph.node(id) else { return false }

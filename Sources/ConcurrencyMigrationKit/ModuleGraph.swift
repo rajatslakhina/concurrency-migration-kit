@@ -190,33 +190,41 @@ public struct ModuleGraph: Sendable {
 
     /// Every module that reaches `id` through one or more edges.
     ///
-    /// Breadth-first over the reverse graph with a `visited` set, so a diamond is walked
-    /// once and the traversal terminates on any input the initialiser accepted.
+    /// Breadth-first over the reverse graph. A node is marked visited when it is
+    /// *enqueued*, not when it is dequeued: marking on dequeue is also correct and also
+    /// terminates, but it lets the same node be appended once per incoming edge, so the
+    /// queue grows to O(E) on a dense graph. Since the planner calls `blastRadius` once
+    /// per module, that difference is the whole cost of planning.
     public func transitiveDependents(of id: ModuleID) -> Set<ModuleID> {
         var visited: Set<ModuleID> = []
-        var queue: [ModuleID] = (dependents[id] ?? []).sorted()
+        var queue: [ModuleID] = []
+        for start in (dependents[id] ?? []).sorted() where visited.insert(start).inserted {
+            queue.append(start)
+        }
         var head = 0
         while head < queue.count {
             let current = queue[head]
             head += 1
-            guard visited.insert(current).inserted else { continue }
-            for next in (dependents[current] ?? []).sorted() where !visited.contains(next) {
+            for next in (dependents[current] ?? []).sorted() where visited.insert(next).inserted {
                 queue.append(next)
             }
         }
         return visited
     }
 
-    /// Every module `id` reaches through one or more edges.
+    /// Every module `id` reaches through one or more edges. Same enqueue-time marking as
+    /// `transitiveDependents(of:)`, over the forward graph.
     public func transitiveDependencies(of id: ModuleID) -> Set<ModuleID> {
         var visited: Set<ModuleID> = []
-        var queue: [ModuleID] = (nodes[id]?.dependencies ?? []).sorted()
+        var queue: [ModuleID] = []
+        for start in (nodes[id]?.dependencies ?? []).sorted() where visited.insert(start).inserted {
+            queue.append(start)
+        }
         var head = 0
         while head < queue.count {
             let current = queue[head]
             head += 1
-            guard visited.insert(current).inserted else { continue }
-            for next in (nodes[current]?.dependencies ?? []).sorted() where !visited.contains(next) {
+            for next in (nodes[current]?.dependencies ?? []).sorted() where visited.insert(next).inserted {
                 queue.append(next)
             }
         }
