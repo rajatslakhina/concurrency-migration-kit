@@ -46,3 +46,10 @@ jobs:
           xcodebuild build \
             -scheme ConcurrencyMigrationKit-Package \
             -destination 'generic/platform=iOS Simulator'
+
+      # Package.swift declares macOS, so something has to build it. Two SwiftUI modifiers
+      # in the dashboard are `@available(macOS, unavailable)` and are `#if os(iOS)`-guarded
+      # for exactly this reason; without this step that guard could rot unnoticed and
+      # `swift build` would break for anyone on a Mac.
+      - name: Build and test for macOS
+        run: swift test
