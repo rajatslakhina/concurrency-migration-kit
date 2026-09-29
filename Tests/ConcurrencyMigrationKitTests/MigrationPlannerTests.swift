@@ -85,14 +85,23 @@ final class MigrationPlannerTests: XCTestCase {
     }
 
     /// Everything public here is an immutable value, so this cannot fail by data race
-    /// today. What it does pin is that those values are genuinely `Sendable` in use — the
-    /// compiler has to accept them crossing 64 task boundaries — and that planning holds
-    /// no hidden shared state. If someone later adds a memo table to the planner for the
-    /// blast radii, this is the test that stops it being a silent data race.
-    func testPlanningTheSameGraphFromManyTasksAtOnceAgrees() async throws {
+    /// today. Two things it does pin: that those values are genuinely `Sendable` in use —
+    /// the compiler has to accept them crossing 64 task boundaries — and that a plan built
+    /// concurrently is still a *correct* plan, not merely one that 64 tasks agree on.
+    ///
+    /// That second assertion is the load-bearing one. Comparing 64 copies of a planner's
+    /// output against a reference from the same planner is satisfied by any deterministic
+    /// planner, including a catastrophically wrong one; validating each plan against the
+    /// graph is not. Swapping the real planner for `NaiveWavePlanner` fails this test.
+    func testPlanningTheSameGraphFromManyTasksAtOnceStaysCorrect() async throws {
         let graph = try Fixture.layeredApp()
         let planner = MigrationPlanner(policy: MigrationPolicy(diagnosticsPerWave: 30))
         let reference = planner.plan(for: graph)
+        XCTAssertEqual(
+            reference.waves.map { $0.modules.map(\.id.rawValue) },
+            [["Logging", "Persistence"], ["Networking", "Profile"], ["Checkout"], ["Sync"], ["AppShell"]],
+            "the reference plan itself must be the right one, not merely a stable one"
+        )
 
         let plans = await withTaskGroup(of: MigrationPlan.self) { group in
             for _ in 0..<64 {
@@ -105,6 +114,10 @@ final class MigrationPlannerTests: XCTestCase {
 
         XCTAssertEqual(plans.count, 64)
         for (index, plan) in plans.enumerated() {
+            XCTAssertEqual(
+                plan.violations(against: graph), [],
+                "task \(index) produced an invalid plan"
+            )
             XCTAssertEqual(plan, reference, "task \(index) produced a different plan")
         }
     }
