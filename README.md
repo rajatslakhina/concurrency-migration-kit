@@ -57,7 +57,7 @@ The same discipline found a real bug in this repo. `SaturatingMath.percentage` o
 
 ## Safety properties
 
-No force-unwraps. Every collection access is bounds-checked or expressed as a `Sequence` operation. Every arithmetic operation that can trap — `+`, `-`, `*`, `/`, `%`, `Int(Double)` — goes through `SaturatingMath`, including the `Double(Int.max)` boundary that rounds *up* to 2^63 and defeats the obvious-looking `value <= Double(Int.max)` guard. Nothing widens to `Int64`, so the semantics hold where `Int` is 32 bits. The graph traversals are iterative, so a 5,000-module chain is a test case rather than a stack overflow.
+No force-unwraps. Every collection access is bounds-checked or expressed as a `Sequence` operation. Every arithmetic operation on graph-derived quantities — counts parsed out of a build log, budgets from a config file, blast radii accumulated across a closure — goes through `SaturatingMath`, including the `Double(Int.max)` boundary that rounds *up* to 2^63 and defeats the obvious-looking `value <= Double(Int.max)` guard. Nothing widens to `Int64`, so the semantics hold where `Int` is 32 bits. The graph traversals are iterative, so a 5,000-module chain is a test case rather than a stack overflow.
 
 ## Using it
 
@@ -96,11 +96,18 @@ swift test
 
 ## Verification
 
-<!-- VERIFICATION -->
+Two CI jobs, both on [the Actions tab](https://github.com/rajatslakhina/concurrency-migration-kit/actions):
+
+- **`linux`** runs `swift build -Xswiftc -warnings-as-errors` and `swift test` in a `swift:6.1` container. The flag lives in the job, not in this sentence, so "no warnings" is machine-enforced rather than asserted in prose. **56 tests.**
+- **`apple`** builds both products for a `generic/platform=iOS Simulator` destination on `macos-15`. It exists because the Linux job *cannot see* `ConcurrencyMigrationKitUI` at all — the whole file sits inside `#if canImport(SwiftUI)`, so on Linux it compiles to an empty module. Without this job every line of the SwiftUI target would be unverified by any compiler.
+
+The same two commands were run against a clean `.build` on Swift 6.1.2 before publishing: clean build, 56 tests, 0 failures.
+
+**The demo app has never been launched on an iOS Simulator.** It compiles against this package for a Simulator destination in the companion repo's CI, which is a different statement — see that repo's README for the full disclosure. No screenshot of it exists in either repository.
 
 ## Demo app
 
-Demo app: (added after the companion repo is pushed — see below)
+[**concurrency-migration-kit-demo-app**](https://github.com/rajatslakhina/concurrency-migration-kit-demo-app) — a SwiftUI app that drives this package against a twelve-module commerce graph, consuming it as a version-pinned remote Swift package.
 
 ## Licence
 
