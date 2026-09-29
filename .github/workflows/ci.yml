@@ -16,6 +16,10 @@ jobs:
     name: Swift 6.1 / Linux
     runs-on: ubuntu-latest
     container: swift:6.1
+    # A planner bug that stopped the wave loop making progress used to be an unbounded
+    # loop. It is now caught by an assertion instead, but a timeout costs nothing and
+    # turns any future variant into a fast red X rather than a six-hour default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -26,3 +30,19 @@ jobs:
 
       - name: Test
         run: swift test
+
+  apple:
+    # The Linux job cannot see ConcurrencyMigrationKitUI at all: the whole file is inside
+    # `#if canImport(SwiftUI)`, so on Linux it compiles to an empty module. Without this
+    # job every line of the SwiftUI target would be unverified by any compiler.
+    name: iOS Simulator build (compiles the SwiftUI target)
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build both products for the iOS Simulator
+        run: |
+          xcodebuild build \
+            -scheme ConcurrencyMigrationKit-Package \
+            -destination 'generic/platform=iOS Simulator'
