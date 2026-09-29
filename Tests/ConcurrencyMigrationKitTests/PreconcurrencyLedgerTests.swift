@@ -49,7 +49,10 @@ final class PreconcurrencyLedgerTests: XCTestCase {
         XCTAssertEqual(audit.justified, [])
         XCTAssertFalse(audit.passesGate, "a stale suppression must fail the gate")
         XCTAssertEqual(audit.gateFailures.count, 1)
-        XCTAssertTrue(audit.gateFailures[0].contains("platform-team"), "the failure must name an owner")
+        // `XCTAssertEqual` does not halt the test, so subscripting here would trap and kill
+        // the whole process if this ever regressed to empty. `XCTUnwrap` reports instead.
+        let failure = try XCTUnwrap(audit.gateFailures.first)
+        XCTAssertTrue(failure.contains("platform-team"), "the failure must name an owner")
     }
 
     func testAnEntryPastItsReviewDateIsOverdueButDoesNotFailTheGate() throws {

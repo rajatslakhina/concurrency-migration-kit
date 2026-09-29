@@ -40,10 +40,11 @@ final class MigrationPlannerTests: XCTestCase {
         XCTAssertEqual(plan.violations(against: done), [])
     }
 
-    /// The ranking's third key exists so the plan does not depend on `Set` iteration order.
-    /// Calling the planner twice in one process would prove nothing — the same `Set` hashes
-    /// the same way within a process. Feeding the *same graph built from a different input
-    /// ordering* is what actually exercises it.
+    /// Covers one specific thing: the order nodes are handed to `ModuleGraph.init` does not
+    /// leak into the plan. It does **not** exercise the ranking's id tie-break — the
+    /// planner reads `graph.pendingModules`, which is already sorted, so the shuffle is
+    /// washed out before the comparator sees it. `testRankingFallsBackToAStableIdOrder`
+    /// below is the test that actually pins the tie-break.
     func testPlanIsIdenticalWhenTheSameGraphIsBuiltInADifferentOrder() throws {
         var generator = SeededGenerator(seed: 0xC0FF_EE01)
         let canonical = try Fixture.layeredApp()
@@ -61,6 +62,50 @@ final class MigrationPlannerTests: XCTestCase {
                 plan, reference,
                 "attempt \(attempt): the plan changed with the input ordering"
             )
+        }
+    }
+
+    /// The ranking's third key, pinned directly.
+    ///
+    /// Twelve leaf modules with identical blast radius (all zero) and identical cost, so
+    /// nothing but the id comparison can decide their order. Delete `return lhs < rhs`
+    /// from the comparator and the order falls back to `Set` iteration, which matches
+    /// sorted order for twelve elements roughly once in 479,001,600 runs.
+    func testRankingFallsBackToAStableIdOrderWhenRadiusAndCostTie() throws {
+        let names = [
+            "Quebec", "Alpha", "Zulu", "Mike", "Bravo", "Yankee",
+            "Delta", "Xray", "Charlie", "November", "Echo", "Sierra",
+        ]
+        let graph = try ModuleGraph(
+            names.map { ModuleNode(id: ModuleID($0), posture: .swift5Targeted, openDiagnostics: 5) }
+        )
+        let plan = MigrationPlanner().plan(for: graph)
+        XCTAssertEqual(plan.waves.count, 1, "every module is a leaf, so they all go in wave 1")
+        XCTAssertEqual(plan.waves.first?.modules.map(\.id.rawValue), names.sorted())
+    }
+
+    /// Everything public here is an immutable value, so this cannot fail by data race
+    /// today. What it does pin is that those values are genuinely `Sendable` in use — the
+    /// compiler has to accept them crossing 64 task boundaries — and that planning holds
+    /// no hidden shared state. If someone later adds a memo table to the planner for the
+    /// blast radii, this is the test that stops it being a silent data race.
+    func testPlanningTheSameGraphFromManyTasksAtOnceAgrees() async throws {
+        let graph = try Fixture.layeredApp()
+        let planner = MigrationPlanner(policy: MigrationPolicy(diagnosticsPerWave: 30))
+        let reference = planner.plan(for: graph)
+
+        let plans = await withTaskGroup(of: MigrationPlan.self) { group in
+            for _ in 0..<64 {
+                group.addTask { planner.plan(for: graph) }
+            }
+            var collected: [MigrationPlan] = []
+            for await plan in group { collected.append(plan) }
+            return collected
+        }
+
+        XCTAssertEqual(plans.count, 64)
+        for (index, plan) in plans.enumerated() {
+            XCTAssertEqual(plan, reference, "task \(index) produced a different plan")
         }
     }
 
